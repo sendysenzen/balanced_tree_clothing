@@ -109,11 +109,113 @@ GROUP BY 1,2;
 
 -- C. Product Analysis
 -----------------------
+-- C. Product Analysis
+-----------------------
 -- C.1 What are the top 3 products by total revenue before discount?
+SELECT sales.prod_id,
+    product_details.product_name,
+    SUM(sales.qty*sales.price) total_revenue
+FROM sales 
+INNER JOIN product_details
+ON sales.prod_id = product_details.product_id
+GROUP BY 1,2
+ORDER BY 3 DESC
+LIMIT 3
+
 -- C.2 What is the total quantity, revenue and discount for each segment?
+WITH cte AS (   
+SELECT
+    prod_id,
+    SUM(qty) total_qty,
+    SUM(qty*price) total_revenue,
+    SUM(discount) total_discount
+FROM sales
+GROUP BY 1
+)
+SELECT 
+    t1.segment_id,
+    t1.segment_name,
+    SUM(t2.total_qty) total_qty,
+    SUM(t2.total_revenue) total_revenue,
+    SUM(t2.total_discount) total_discount
+FROM product_details t1
+INNER JOIN cte t2
+ON t1.product_id = t2.prod_id
+GROUP BY 1,2
+
 -- C.3 What is the top selling product for each segment?
+-- top selling means we are using revenue as parameter
+WITH cte AS(
+SELECT t1.prod_id,
+    t2.product_name,
+    t2.segment_id,
+    t2.segment_name,
+    SUM(t1.qty) total_qty,
+    SUM(t1.qty*t1.price) total_revenue,
+    RANK() OVER(PARTITION BY t2.segment_id ORDER BY SUM(t1.qty*t1.price) DESC ) rank_rev
+FROM sales t1
+INNER JOIN product_details t2
+ON t1.prod_id = t2.product_id
+GROUP BY 1,2,3,4
+ORDER BY 3,6 DESC
+) 
+SELECT 
+    segment_id,
+    segment_name,
+    prod_id,
+    product_name,
+    total_revenue
+FROM cte
+WHERE rank_rev = 1
+ORDER BY 5 DESC
+
+
 -- C.4 What is the total quantity, revenue and discount for each category?
+WITH cte AS (   
+SELECT
+    prod_id,
+    SUM(qty) total_qty,
+    SUM(qty*price) total_revenue,
+    SUM(discount) total_discount
+FROM sales
+GROUP BY 1
+)
+SELECT 
+    t1.category_id,
+    t1.category_name,
+    SUM(t2.total_qty) total_qty,
+    SUM(t2.total_revenue) total_revenue,
+    SUM(t2.total_discount) total_discount
+FROM product_details t1
+INNER JOIN cte t2
+ON t1.product_id = t2.prod_id
+GROUP BY 1,2
+
 -- C.5 What is the top selling product for each category?
+WITH cte AS(
+SELECT t1.prod_id,
+    t2.product_name,
+    t2.category_id,
+    t2.category_name,
+    SUM(t1.qty) total_qty,
+    SUM(t1.qty*t1.price) total_revenue,
+    RANK() OVER(PARTITION BY t2.category_id ORDER BY SUM(t1.qty*t1.price) DESC ) rank_rev
+FROM sales t1
+INNER JOIN product_details t2
+ON t1.prod_id = t2.product_id
+GROUP BY 1,2,3,4
+ORDER BY 3,6 DESC
+) 
+SELECT 
+    category_id,
+    category_name,
+    prod_id,
+    product_name,
+    total_revenue
+FROM cte
+WHERE rank_rev = 1
+ORDER BY 5 DESC
+
 -- C.6 What is the percentage split of revenue by product for each segment?
 -- C.7 What is the percentage split of revenue by segment for each category?
 -- C.8 What is the percentage split of total revenue by category?
