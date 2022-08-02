@@ -276,7 +276,97 @@ ORDER BY category_id, cat_rev_percentage DESC;
 
 -- C.9 What is the total transaction “penetration” for each product? (hint: penetration = number of transactions 
 -- where at least 1 quantity of a product was purchased divided by total number of transactions)
+SELECT 
+    t1.prod_id,
+    t2.product_name, 
+    SUM(CASE WHEN t1.qty > 0 THEN 1 ELSE 0 END) penetration_sum
+FROM sales t1
+INNER JOIN product_details t2
+ON t1.prod_id = t2.product_id 
+GROUP BY 1,2
+ORDER BY 3 DESC
+
+SELECT * FROM sales
+
 -- C.10 What is the most common combination of at least 1 quantity of any 3 products in a 1 single transaction?
+-- this will be using ARRAY FUNCTIONS
+-- see the documentation in: https://www.postgresql.org/docs/current/functions-array.html
+
+
+-- 1st step: create a table of combination of 3 products.
+-- total number of data in this 1st step shall follow Combination formula C(12,3) ~ 220 lines
+DROP TABLE IF EXISTS combination_product;
+CREATE TEMP TABLE combination_product AS
+WITH RECURSIVE combination_product(combination, product_id, product_count) AS (
+    SELECT
+        ARRAY[product_id::TEXT] combination,
+        product_id,
+        1 AS product_count
+    FROM product_details
+    -- this is for only one product_id to get the product_id array and table columns that we want 
+    -- (non-recursive query or base query)
+    
+    UNION ALL
+    
+    SELECT 
+        array_append(t1.combination, t2.product_id),
+        t2.product_id,
+        t1.product_count + 1 -- the iteration
+    FROM combination_product t1
+    INNER JOIN product_details t2 
+        ON t1.product_id < t2.product_id -- termination condition  
+    WHERE t1.product_count <= 3 
+    -- this one for the combination of 3 products (recursive query)
+    )
+SELECT * FROM combination_product 
+WHERE product_count = 3
+ORDER BY product_id;
+
+-- next step: create an array for product id in every transaction & check whether the 
+-- 3 combination list is included in each transactions product_id 
+-- using array_agg
+-- see here: https://www.postgresql.org/docs/9.5/functions-aggregate.html
+DROP TABLE IF EXISTS cross_checking_products;
+CREATE TEMP TABLE cross_checking_products AS
+WITH cte_txn_products AS (
+    SELECT
+        txn_id,
+        array_agg(prod_id::TEXT ORDER BY prod_id) product_list
+    FROM sales
+    GROUP BY 1
+    )
+SELECT 
+    txn_id,
+    combination,
+    product_list
+FROM cte_txn_products
+    CROSS JOIN combination_product 
+    WHERE combination <@ product_list ;
+-- combination is in product_list
+
+-- now we will find the most common combination by counting the 3 combination, we need to make 
+-- sure the rank is not duplicate, the most common combination must be in rank 1.
+-- let's say if there is 2 rank 1 then both of the combination must be included.    
+WITH cte_ranked AS ( 
+    SELECT
+        combination, 
+        COUNT(DISTINCT txn_id) txn_count, 
+        RANK() OVER(ORDER BY COUNT(DISTINCT txn_id) DESC) combination_rank
+    FROM cross_checking_products
+    GROUP BY 1 -- fortunately there is only one ranking #1
+    ), 
+    cte_get_product AS ( 
+    SELECT 
+        UNNEST(combination) prod_id    
+    FROM cte_ranked
+    WHERE combination_rank = 1
+)
+SELECT 
+    t1.prod_id,
+    t2.product_name
+FROM cte_get_product t1
+INNER JOIN product_details t2
+ON t1.prod_id = t2.product_id;
 
 
 /*
