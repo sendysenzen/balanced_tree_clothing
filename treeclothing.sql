@@ -384,6 +384,7 @@ Feel free to split up your final outputs into as many tables as you need - but b
 table outputs relate to which question for full marks :)
 */
 
+-- I will do above question later
 
 /* 
 Bonus Challenge
@@ -392,3 +393,53 @@ Use a single SQL query to transform the product_hierarchy and product_prices dat
 
 */
 
+-- based on the views from these 2 columns, you would have assumed that the hierarchy is category, segment, style respectively
+-- so there are 3 levels. I created column level to solve and understand this problem better
+
+WITH RECURSIVE details (id,lvl, category_id, segment_id, style_id, category_name, segment_name, style_name) AS (
+    SELECT 
+        id,
+        0 as lvl,
+        id as category_id,
+        NULL::INTEGER as segment_id,
+        NULL::INTEGER as style_id,
+        level_text as category_name,
+        NULL::VARCHAR as segment_name,
+        NULL::VARCHAR as style_name
+    FROM product_hierarchy
+    WHERE parent_id IS NULL
+    -- non-recursive/anchor
+    
+    UNION ALL
+    
+    SELECT 
+        t2.id,
+        lvl+1 as lvl,
+        t1.category_id,
+        CASE WHEN t1.lvl = 1 then t1.id else t1.segment_id end segment_id,
+        CASE WHEN t1.lvl = 1 then t2.id else t1.style_id end style_id,
+        t1.category_name,
+        CASE WHEN t1.lvl = 1 then t1.segment_name else t2.level_text end segment_name,
+        CASE WHEN t1.lvl = 1 then t2.level_text else t1.style_name end style_name  
+    FROM details t1
+    INNER JOIN product_hierarchy t2 
+        ON t1.id = t2.parent_id 
+        AND t2.parent_id IS NOT NULL-- termination condition
+)
+SELECT
+    t2.product_id, 
+    t2.price,
+    t1.category_id,
+    t1.segment_id,
+    t1.style_id,
+    t1.style_name || ' ' || t1.segment_name || ' - ' || t1.category_name as product_name, 
+    t1.category_name,
+    t1.segment_name,
+    t1.style_name
+FROM details t1
+INNER JOIN product_prices t2
+    ON t1.id = t2.id
+WHERE t1.style_id IS NOT NULL ;
+
+-- NOTE: While I understand the concept of recursive but in advanced practice such this question,  
+-- it is difficult to solve it without using trial and error
